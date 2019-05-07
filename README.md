@@ -15,4 +15,4 @@ In the end we have to continue execution with `PTRACE_CONT`.
 POC
 ---
 
-!Proof Of Concept](poc.png)
+!Proof Of Concept](https://raw.githubusercontent.com/W3ndige/linux-process-injection/master/poc.png)
